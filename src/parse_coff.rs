@@ -10,9 +10,9 @@ pub type Result<'a, O> = nom::IResult<Input<'a>, O, nom::error::VerboseError<Inp
 
 #[derive(Debug)]
 pub struct COFFFile {
-    header: COFFHeader,
-    optional_header: Option<COFFOptionalHeader>,
-    sections: Vec<COFFSection>,
+    pub header: COFFHeader,
+    pub optional_header: Option<COFFOptionalHeader>,
+    pub sections: Vec<COFFSection>,
 }
 
 impl COFFFile {
@@ -35,13 +35,13 @@ impl COFFFile {
 }
 
 #[derive(Debug)]
-struct COFFHeader {
-    number_sections: u16,
-    creation_timestamp: u32,
-    symbol_table_pointer: u32,
-    number_symbols: u32,
-    optional_header_size: u16,
-    flags: u16,
+pub struct COFFHeader {
+    pub number_sections: u16,
+    pub creation_timestamp: u32,
+    pub symbol_table_pointer: u32,
+    pub number_symbols: u32,
+    pub optional_header_size: u16,
+    pub flags: u16,
 }
 
 impl COFFHeader {
@@ -71,15 +71,15 @@ impl COFFHeader {
 }
 
 #[derive(Debug)]
-struct COFFOptionalHeader {
-    magic: u16,
-    version_stamp: u16,
-    text_size: u32,
-    data_size: u32,
-    bss_size: u32,
-    entry_address: u32,
-    text_start: u32,
-    data_start: u32
+pub struct COFFOptionalHeader {
+    pub magic: u16,
+    pub version_stamp: u16,
+    pub text_size: u32,
+    pub data_size: u32,
+    pub bss_size: u32,
+    pub entry_address: u32,
+    pub text_start: u32,
+    pub data_start: u32
 }
 
 impl COFFOptionalHeader {
@@ -110,8 +110,8 @@ impl COFFOptionalHeader {
 }
 
 #[derive(Debug)]
-struct COFFSection {
-    header: COFFSectionHeader
+pub struct COFFSection {
+    pub header: COFFSectionHeader
 }
 
 impl COFFSection {
@@ -123,21 +123,21 @@ impl COFFSection {
 }
 
 #[derive(Debug)]
-struct COFFSectionHeader {
-    section_name: [u8; 8],
-    physical_address: u32,
-    virtual_address: u32,
-    size: u32,
-    section_data_offset: u32,
-    section_relocations_offset: u32,
-    section_line_number_offset: u32,
-    num_relocations: u16,
-    num_line_number_entries: u16,
-    flags: SectionTypeFlags
+pub struct COFFSectionHeader {
+    pub section_name: [u8; 8],
+    pub physical_address: u32,
+    pub virtual_address: u32,
+    pub size: u32,
+    pub section_data_offset: u32,
+    pub section_relocations_offset: u32,
+    pub section_line_number_offset: u32,
+    pub num_relocations: u16,
+    pub num_line_number_entries: u16,
+    pub flags: SectionTypeFlags
 }
 
 bitflags! {
-    struct SectionTypeFlags: u32 {
+    pub struct SectionTypeFlags: u32 {
         const TEXT = 0x0020;
         const DATA = 0x0040;
         const BSS = 0x0080;

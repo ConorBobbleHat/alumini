@@ -66,9 +66,14 @@ fn main() -> Result<()> {
 
         // Actually copy the data from the COFF file
         let dest = unsafe { std::slice::from_raw_parts_mut(section_addr as *mut u8, section_size) };
-        dest.copy_from_slice(
-            &coff_bytes[section.header.physical_address.try_into().unwrap()..][..section_size],
-        );
+        if section.header.flags.contains(SectionTypeFlags::BSS) {
+            dest.fill(0); // BSS data is uninitalized, and should be zero-filled
+        } else {
+            dest.copy_from_slice(
+                &coff_bytes[section.header.section_data_offset.try_into().unwrap()..]
+                    [..section_size],
+            );
+        }
     }
 
     // Map an extra area in to act as a stack
@@ -82,7 +87,7 @@ fn main() -> Result<()> {
             MapOption::MapAddr(stack_top),
         ],
     )?;
-    
+
     mappings.push(stack_map); // dropping the map unmaps it - so let's hang onto it!
 
     unsafe {
@@ -132,17 +137,17 @@ fn main() -> Result<()> {
 
         // Set EDX to a pointer to prog_info
         asm!("nop", in("edx") prog_ptr);
-        
+
         // Setup the stack
         // WARNING: attempting to extensively use local variables past here will result in a bad time!
         // TODO: any way to avoid this?
         asm!("mov esp, 0xc0000000");
-        
+
         // Arguments to _main
-        asm!("push 0x41414141"); // ?       
+        asm!("push 0x41414141"); // ?
         asm!("push {}", in(reg) argv); // argv
         asm!("push 2"); // argc
-        
+
         asm!("int3");
         asm!("jmp {}", in(reg) fn_ptr);
     }

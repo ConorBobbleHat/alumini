@@ -6,6 +6,7 @@ use parse_coff::SectionTypeFlags;
 
 mod child_process;
 mod parent_process;
+mod parent_utils;
 mod parse_coff;
 
 fn wrapped_main() -> Result<ExitCode> {
@@ -13,7 +14,7 @@ fn wrapped_main() -> Result<ExitCode> {
     
     let input_path = std::env::args()
         .nth(1)
-        .expect("Usage: alumini [executable]");
+        .expect("Usage: alumini <executable> [executable arguments]");
 
     let coff_bytes = std::fs::read(input_path)?;
 

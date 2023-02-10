@@ -1,37 +1,20 @@
 use anyhow::Result;
 use nix::sys::ptrace;
 
-use std::arch::asm;
 use mmap::{MapOption, MemoryMap};
+use std::{arch::asm, os::unix::prelude::OsStrExt, path::Path};
 use x86::segmentation::SegmentSelector;
 
-use crate::parse_coff::{SectionTypeFlags, COFFFile};
+use crate::parse_coff::{COFFFile, SectionTypeFlags};
 
 const STACK_ADDR: usize = 0xc0000000;
 const STACK_SIZE: usize = 0x100000;
 
 const ALLOC_SIZE: usize = 0x100000;
 
-#[repr(C)]
-struct ProgInfo {
-    size: u32,
-    primary_screen_address: u32,
-    secondary_screen_address: u32,
-    transfer_buffer_address: u32,
-    transfer_buffer_size: u32,
-    pid: u32,
-    master_interrupt_control_base: u8,
-    slave_interrupt_control_base: u8,
-    linear_memory_selector: u16,
-    stub_info_address: u32,
-    psp_address: u32,
-    run_mode: u16,
-    run_mode_info: u16,
-}
-
 pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
     ptrace::traceme()?;
-    
+
     let mut mappings = Vec::new();
 
     // Heavily adapted from https://fasterthanli.me/series/making-our-own-executable-packer/part-2
@@ -90,9 +73,10 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         .iter()
         .find(|x| x.header.flags.contains(SectionTypeFlags::BSS))
         .expect("Executable contains no bss segment?");
-    
-    let program_break = ((bss_section.header.virtual_address + bss_section.header.size + 8) & !7) & !(page_size::get() as u32 - 1);
-    
+
+    let program_break = ((bss_section.header.virtual_address + bss_section.header.size + 8) & !7)
+        & !(page_size::get() as u32 - 1);
+
     let alloc_map = MemoryMap::new(
         ALLOC_SIZE,
         &[
@@ -102,13 +86,47 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         ],
     )?;
 
-    mappings.push(alloc_map); 
+    mappings.push(alloc_map);
+
+    // Construct both a null-terminated array of all our arguments concatenated together
+    // and an array of pointers pointing to each of our individual arguments (argv)
+    let mut args = std::env::args().skip(1); // skip our program name
+    let num_args = args.len();
+
+    let prog_name = args.nth(0).unwrap(); // safe; we got this far
+    let prog_name = Path::new(&prog_name).file_name().unwrap();
     
+    let other_args: Vec<_> = args.collect();
+    let other_arg_lengths: Vec<_> = other_args.iter().map(|x| x.len()).collect();
+
+    let mut arg_bytes = Vec::new();
+    let mut arg_ptrs = Vec::new();
+
+    arg_bytes.extend(prog_name.as_bytes());
+    arg_bytes.push(0);
+
+    for arg in other_args {
+        arg_bytes.extend(arg.as_bytes());
+        arg_bytes.push(0);
+    }
+
+    let mut arg_arr_ptr = arg_bytes.as_ptr() as usize;
+    arg_ptrs.extend(usize::to_le_bytes(arg_arr_ptr));
+    arg_arr_ptr += prog_name.as_bytes().len() + 1;
+
+    for len in other_arg_lengths {
+        arg_ptrs.extend(usize::to_le_bytes(arg_arr_ptr));
+        arg_arr_ptr += len + 1;
+    }
+
+    let argv = arg_ptrs;
+    let argc = num_args;
+
     unsafe {
         // WHAT ENVIRONMENT A GO32 PROGRAM STARTS TO:
         // EAX: some processed version of g_core?
         // EBX: _ScreenPrimary
-        // ECX: ??
+        // ECX: ??; we use as jump address
         // EDX: a pointer to prog_info
         // EDI: transfer buffer pointer
         // EBP: _ScreenSecondary
@@ -119,53 +137,23 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         // Unwrap is safe here - if it doesn't have an optional header, it isn't an executable
         let fn_ptr: fn() = std::mem::transmute(coff.optional_header.unwrap().entry_address);
 
-        let prog_info = ProgInfo {
-            size: std::mem::size_of::<ProgInfo>() as u32,
-            primary_screen_address: 0,
-            secondary_screen_address: 0,
-            transfer_buffer_address: 0,
-            transfer_buffer_size: 0,
-            pid: 42,
-            master_interrupt_control_base: 0,
-            slave_interrupt_control_base: 0,
-            linear_memory_selector: 0,
-            stub_info_address: 0,
-            psp_address: 0,
-            run_mode: 0,
-            run_mode_info: 0,
-        };
-
-        let prog_ptr = &prog_info as *const ProgInfo;
-        let prog_ptr = prog_ptr as *const u8;
-
         // https://stackoverflow.com/questions/5599400/where-linux-sets-its-kernel-and-user-space-segment-selector-values
         // we want GS to be __USER_DS (0x7b, or, (5 << 3) + 3)) to ensure it's mapped linearly, as go32 expects
         x86::segmentation::load_gs(SegmentSelector::new(5, x86::Ring::Ring3));
 
-        let arg1 = b"CC1PSX.EXE\x00"; // TODO: generate dynamically
-        let arg2 = b"-quiet\x00\x00\x00\x00\x00";
-        let arg3 = b"test.c\x00\x00\x00\x00\x00";
-
-        let argv = &[arg1, arg2, arg3];
-        asm!("mov ecx, 0", out("ecx") _);
-
-        // Set EDX to a pointer to prog_info
-        asm!("nop", in("edx") prog_ptr);
-
-        // Clear EDI (transfer buffer pointer) to use backup method of IPC
-        asm!("xor edi, edi");
-
-        // Setup the stack
-        // WARNING: attempting to extensively use local variables past here will result in a bad time!
-        // TODO: any way to avoid this?
-        asm!("mov esp, 0xc0000000");
-
-        // Arguments to _main
-        asm!("push 0x41414141"); // ?
-        asm!("push {}", in(reg) argv); // argv
-        asm!("push 3"); // argc
-
-        asm!("jmp {}", in(reg) fn_ptr);
+        asm!(
+            "xor edx, edx",         // clear prog_info pointer
+            "xor edi, edi",         // clear transfer buffer pointer to use backup IPC method
+            "mov esp, 0xc0000000",  // setup stack
+            "push 0x41414141",      // ?
+            "push eax",             // argv
+            "push ebx",             // argc
+            "mov esi, 42",          // pid
+            "jmp ecx",
+            in("eax") argv.as_ptr(),
+            in("ebx") argc,
+            in("ecx") fn_ptr,
+        );
     };
 
     Ok(())

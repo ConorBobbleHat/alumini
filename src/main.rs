@@ -40,7 +40,7 @@ fn wrapped_main() -> Result<ExitCode> {
         _ => panic!("Unknown executable format"),
     };
 
-    let (_, coff) = parse_coff::COFFFile::parse(&coff_bytes)
+    let (_, coff) = parse_coff::COFFFile::parse(coff_bytes)
         .map_err(|e| anyhow!("Error parsing go32 COFF executable: {e}"))?;
 
     // Find the program break so the parent knows where it is
@@ -60,7 +60,7 @@ fn wrapped_main() -> Result<ExitCode> {
         }
         Ok(ForkResult::Parent { child }) => {
             let exit_code = parent_process::parent_main(child, program_break)?;
-            return Ok(ExitCode::from(exit_code));
+            Ok(ExitCode::from(exit_code))
         }
         Err(e) => Err(anyhow!("Error invoking fork: {e}")),
     }

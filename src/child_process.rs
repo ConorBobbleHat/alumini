@@ -93,9 +93,9 @@ pub fn child_main(coff: COFFFile, coff_bytes: &[u8]) -> Result<()> {
     let mut args = std::env::args().skip(1); // skip our program name
     let num_args = args.len();
 
-    let prog_name = args.nth(0).unwrap(); // safe; we got this far
+    let prog_name = args.next().unwrap(); // safe; we got this far
     let prog_name = Path::new(&prog_name).file_name().unwrap();
-    
+
     let other_args: Vec<_> = args.collect();
     let other_arg_lengths: Vec<_> = other_args.iter().map(|x| x.len()).collect();
 

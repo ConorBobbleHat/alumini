@@ -1,6 +1,8 @@
 use nom::{
+    bytes::complete::{tag, take},
     error::context,
-    number::complete::{le_u16, le_u32}, bytes::complete::{tag, take}, multi::count,
+    multi::count,
+    number::complete::{le_u16, le_u32},
 };
 
 use bitflags::bitflags;
@@ -30,7 +32,14 @@ impl COFFFile {
 
         // TODO: read symbols, line numbers, relocations, etc.
 
-        Ok((i, Self { header, optional_header, sections }))
+        Ok((
+            i,
+            Self {
+                header,
+                optional_header,
+                sections,
+            },
+        ))
     }
 }
 
@@ -79,7 +88,7 @@ pub struct COFFOptionalHeader {
     pub bss_size: u32,
     pub entry_address: u32,
     pub text_start: u32,
-    pub data_start: u32
+    pub data_start: u32,
 }
 
 impl COFFOptionalHeader {
@@ -92,7 +101,6 @@ impl COFFOptionalHeader {
         let (i, entry_address) = context("entry_address", le_u32)(i)?;
         let (i, text_start) = context("text_start", le_u32)(i)?;
         let (i, data_start) = context("data_start", le_u32)(i)?;
-        
 
         let ret = Self {
             magic,
@@ -102,7 +110,7 @@ impl COFFOptionalHeader {
             bss_size,
             entry_address,
             text_start,
-            data_start
+            data_start,
         };
 
         Ok((i, ret))
@@ -111,7 +119,7 @@ impl COFFOptionalHeader {
 
 #[derive(Debug)]
 pub struct COFFSection {
-    pub header: COFFSectionHeader
+    pub header: COFFSectionHeader,
 }
 
 impl COFFSection {
@@ -133,7 +141,7 @@ pub struct COFFSectionHeader {
     pub section_line_number_offset: u32,
     pub num_relocations: u16,
     pub num_line_number_entries: u16,
-    pub flags: SectionTypeFlags
+    pub flags: SectionTypeFlags,
 }
 
 bitflags! {
@@ -167,7 +175,7 @@ impl COFFSectionHeader {
             section_line_number_offset,
             num_relocations,
             num_line_number_entries,
-            flags: SectionTypeFlags::from_bits_truncate(flags)
+            flags: SectionTypeFlags::from_bits_truncate(flags),
         };
 
         Ok((i, ret))

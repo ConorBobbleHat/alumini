@@ -1,6 +1,6 @@
-use std::ffi::c_void;
 use anyhow::Result;
 use nix::{sys::ptrace, unistd::Pid};
+use std::ffi::c_void;
 
 pub fn read_bytes(child: Pid, addr: u32, size: usize) -> Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(size + 3);
@@ -26,9 +26,8 @@ pub fn write_bytes(child: Pid, addr: u32, bytes: &[u8]) -> Result<()> {
         } else {
             let existing_word = i32::to_le_bytes(ptrace::read(child, indexed_addr)?);
 
-            let mixed_word = [&word_bytes, &existing_word[word_bytes.len()..]].concat();
-            let mixed_word = i32::from_le_bytes(mixed_word.try_into().unwrap());
-            mixed_word
+            let mixed_word = [word_bytes, &existing_word[word_bytes.len()..]].concat();
+            i32::from_le_bytes(mixed_word.try_into().unwrap())
         };
 
         unsafe { ptrace::write(child, indexed_addr, d as *mut c_void)? };

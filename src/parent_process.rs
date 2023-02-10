@@ -7,7 +7,7 @@ use std::{
     os::linux::fs::MetadataExt,
 };
 
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 use num_derive::FromPrimitive;
 
 use anyhow::{anyhow, Result};
@@ -22,7 +22,7 @@ use nix::{
 
 use num_traits::FromPrimitive;
 
-use crate::parent_utils::{write_bytes, read_null_terminated_string, read_bytes};
+use crate::parent_utils::{read_bytes, read_null_terminated_string, write_bytes};
 
 // encoding for x86's INT opcode
 const INT_OPCODE: u8 = 0xcd;
@@ -107,7 +107,7 @@ pub fn parent_main(child: Pid, program_break: u32) -> Result<u8> {
                                         Some(TurboServices::Fstat) => {
                                             handle_turbo_fstat(child, &mut open_file_handles)?
                                         }
-                                        None => panic!("Unknown turbo assist service {}", service),
+                                        None => panic!("Unknown turbo assist service {service}"),
                                     }
                                 }
 
@@ -117,7 +117,7 @@ pub fn parent_main(child: Pid, program_break: u32) -> Result<u8> {
                                 }
 
                                 None => {
-                                    panic!("Unknown 0x21 service number called: {:#x}", ah)
+                                    panic!("Unknown 0x21 service number called: {ah:#x}")
                                 }
                             };
 
@@ -157,10 +157,7 @@ fn handle_brk_sbrk(child: Pid, program_break: &mut u32) -> Result<()> {
         }
         _ => {
             // SBRK
-            debug!(
-                "sbrk({:#x}). Returning {:#x}",
-                regs.ebx, *program_break
-            );
+            debug!("sbrk({:#x}). Returning {:#x}", regs.ebx, *program_break);
 
             let offset = regs.ebx;
             regs.eax = (*program_break) as i32;
@@ -247,7 +244,7 @@ fn handle_write(child: Pid, open_file_handles: &mut HashMap<u32, File>) -> Resul
                 .get_mut(&fd)
                 .ok_or_else(|| anyhow!("Attempt to write to unknown fd {}", fd))?;
 
-            f.write(&string_bytes)?;
+            f.write_all(&string_bytes)?;
         }
     }
 

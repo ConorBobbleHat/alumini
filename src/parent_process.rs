@@ -261,7 +261,7 @@ fn handle_read(child: Pid, open_file_handles: &mut HashMap<u32, File>) -> Result
 
     let f = open_file_handles
         .get_mut(&fd)
-        .ok_or_else(|| anyhow!("Attempt to fstat unknown fd {}", fd))?;
+        .ok_or_else(|| anyhow!("Attempt to read unknown fd {}", fd))?;
 
     let mut buf = vec![0u8; size];
     let bytes_read = f.read(&mut buf)?;
@@ -299,7 +299,7 @@ fn handle_write(child: Pid, open_file_handles: &mut HashMap<u32, File>) -> Resul
         fd => {
             let f = open_file_handles
                 .get_mut(&fd)
-                .ok_or_else(|| anyhow!("Attempt to fstat unknown fd {}", fd))?;
+                .ok_or_else(|| anyhow!("Attempt to write to unknown fd {}", fd))?;
 
             f.write(&string_bytes)?;
         }
@@ -374,7 +374,7 @@ fn handle_turbo_fstat(child: Pid, open_file_handles: &mut HashMap<u32, File>) ->
 
     let fstat_struct = FStat32 {
         st_dev: metadata.st_dev().try_into()?,
-        st_ino: metadata.st_ino().try_into()?,
+        st_ino: 42, // 64-bit inode is frequently too large for a 16-bit field; fake it for now
         st_mode: metadata.st_mode().try_into()?,
         st_nlink: metadata.st_nlink().try_into()?,
         st_uid: 42,

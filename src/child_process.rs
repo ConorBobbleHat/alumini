@@ -10,6 +10,8 @@ use crate::parse_coff::{SectionTypeFlags, COFFFile};
 const STACK_ADDR: usize = 0xc0000000;
 const STACK_SIZE: usize = 0x100000;
 
+const ALLOC_SIZE: usize = 0x100000;
+
 #[repr(C)]
 struct ProgInfo {
     size: u32,
@@ -67,7 +69,7 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         }
     }
 
-    // Map an extra area in to act as a stack
+    // Map an extra area in to act as a stack ...
     let stack_top: *const u8 = (STACK_ADDR - STACK_SIZE) as _;
 
     let stack_map = MemoryMap::new(
@@ -81,6 +83,27 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
 
     mappings.push(stack_map); // dropping the map unmaps it - so let's hang onto it!
 
+    // ... and one for allocated memory
+    // TODO: actually allocate this on the fly
+    let bss_section = coff
+        .sections
+        .iter()
+        .find(|x| x.header.flags.contains(SectionTypeFlags::BSS))
+        .expect("Executable contains no bss segment?");
+    
+    let program_break = ((bss_section.header.virtual_address + bss_section.header.size + 8) & !7) & !(page_size::get() as u32 - 1);
+    
+    let alloc_map = MemoryMap::new(
+        ALLOC_SIZE,
+        &[
+            MapOption::MapReadable,
+            MapOption::MapWritable,
+            MapOption::MapAddr(program_break as *const u8),
+        ],
+    )?;
+
+    mappings.push(alloc_map); 
+    
     unsafe {
         // WHAT ENVIRONMENT A GO32 PROGRAM STARTS TO:
         // EAX: some processed version of g_core?
@@ -119,10 +142,11 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         // we want GS to be __USER_DS (0x7b, or, (5 << 3) + 3)) to ensure it's mapped linearly, as go32 expects
         x86::segmentation::load_gs(SegmentSelector::new(5, x86::Ring::Ring3));
 
-        let arg1 = &[b'C', b'C', b'1', b'P', b'S', b'X', b'.', b'E', b'X', b'E', 0]; // TODO: generate dynamically
-        let arg2 = &[b'-', b'h', 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let arg1 = b"CC1PSX.EXE\x00"; // TODO: generate dynamically
+        let arg2 = b"-quiet\x00\x00\x00\x00\x00";
+        let arg3 = b"test.c\x00\x00\x00\x00\x00";
 
-        let argv = &[arg1, arg2];
+        let argv = &[arg1, arg2, arg3];
         asm!("mov ecx, 0", out("ecx") _);
 
         // Set EDX to a pointer to prog_info
@@ -139,7 +163,7 @@ pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
         // Arguments to _main
         asm!("push 0x41414141"); // ?
         asm!("push {}", in(reg) argv); // argv
-        asm!("push 2"); // argc
+        asm!("push 3"); // argc
 
         asm!("jmp {}", in(reg) fn_ptr);
     };

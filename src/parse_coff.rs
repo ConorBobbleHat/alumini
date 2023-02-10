@@ -45,7 +45,7 @@ pub struct COFFHeader {
 }
 
 impl COFFHeader {
-    const DJGPP_MAGIC: &'static [u8] = &[0x4c, 0x01];
+    pub const DJGPP_MAGIC: &'static [u8] = &[0x4c, 0x01];
 
     pub fn parse(i: Input) -> Result<Self> {
         let (i, _) = context("Magic", tag(Self::DJGPP_MAGIC))(i)?;

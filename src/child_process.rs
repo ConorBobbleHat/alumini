@@ -12,7 +12,7 @@ const STACK_SIZE: usize = 0x100000;
 
 const ALLOC_SIZE: usize = 0x100000;
 
-pub fn child_main(coff: COFFFile, coff_bytes: Vec<u8>) -> Result<()> {
+pub fn child_main(coff: COFFFile, coff_bytes: &[u8]) -> Result<()> {
     ptrace::traceme()?;
 
     let mut mappings = Vec::new();
